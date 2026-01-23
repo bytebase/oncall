@@ -9,6 +9,12 @@ import (
 )
 
 func main() {
+	// Check for subcommand
+	if len(os.Args) > 1 && os.Args[1] == "validate" {
+		validateCommand()
+		return
+	}
+
 	// Define flags
 	configPath := flag.String("config", "", "Path to the oncall schedule file (required)")
 	groupEmail := flag.String("group", "", "Google Group email address to sync (required)")
@@ -157,4 +163,40 @@ Schedule File Format:
     2026-01-12T00:00:00Z,d@bytebase.com,vh@bytebase.com
     2026-02-09T00:00:00Z,vh@bytebase.com,xz@bytebase.com
 `)
+}
+
+func validateCommand() {
+	// Define flags for validate subcommand
+	validateFlags := flag.NewFlagSet("validate", flag.ExitOnError)
+	configPath := validateFlags.String("config", "", "Path to the oncall schedule file (required)")
+
+	validateFlags.Parse(os.Args[2:])
+
+	if *configPath == "" {
+		fmt.Fprintf(os.Stderr, "Error: --config flag is required\n")
+		fmt.Fprintf(os.Stderr, "Usage: synconcall validate --config=<path>\n")
+		os.Exit(1)
+	}
+
+	// Parse and validate schedule
+	rotations, err := ParseSchedule(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Schedule validation failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Find current rotation (validates that schedule has valid time ranges)
+	now := time.Now()
+	currentRotation, err := FindCurrentRotation(rotations, now)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Schedule validation failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Schedule is valid\n")
+	fmt.Printf("  Total rotations: %d\n", len(rotations))
+	fmt.Printf("  Current rotation: %s - Primary: %s, Secondary: %s\n",
+		currentRotation.StartTime.Format("2006-01-02"),
+		currentRotation.Primary,
+		currentRotation.Secondary)
 }
