@@ -28,4 +28,4 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: |
           cd synconcall
-          ./synconcall --config=../dev.oncall --group=dev-oncall@bytebase.com
+          ./synconcall --config=../dev.oncall --group=dev-oncall@bytebase.com --admin-user=d@bytebase.com

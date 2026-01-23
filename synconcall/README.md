@@ -30,12 +30,13 @@ go build -o synconcall
 ### Command Line
 
 ```bash
-synconcall --config=<path> --group=<email>
+synconcall --config=<path> --group=<email> --admin-user=<email>
 ```
 
 **Required Flags:**
 - `--config`: Path to the oncall schedule file (CSV format)
 - `--group`: Google Group email address to sync
+- `--admin-user`: Domain admin email for service account impersonation
 
 **Environment Variables:**
 - `GOOGLE_CREDENTIALS` (required): Google service account JSON key content
@@ -49,14 +50,14 @@ synconcall --config=<path> --group=<email>
   env:
     GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
   run: |
-    ./synconcall --config=dev.oncall --group=dev-oncall@bytebase.com
+    ./synconcall --config=dev.oncall --group=dev-oncall@bytebase.com --admin-user=d@bytebase.com
 ```
 
 #### Local Testing
 
 ```bash
 GOOGLE_CREDENTIALS="$(cat service-account.json)" \
-  ./synconcall --config=dev.oncall --group=dev-oncall@bytebase.com
+  ./synconcall --config=dev.oncall --group=dev-oncall@bytebase.com --admin-user=d@bytebase.com
 ```
 
 ## Schedule File Format

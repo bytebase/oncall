@@ -51,9 +51,10 @@ The sync is **declarative** - the group always reflects exactly who is currently
 In Google Workspace Admin Console:
 1. Go to Security > API Controls > Domain-wide Delegation
 2. Add the service account client ID
-3. Grant OAuth scopes:
-   - `https://www.googleapis.com/auth/admin.directory.group`
-   - `https://www.googleapis.com/auth/admin.directory.group.member`
+3. Grant OAuth scopes (comma-separated):
+   - `https://www.googleapis.com/auth/admin.directory.group,https://www.googleapis.com/auth/admin.directory.group.member`
+
+**Note:** The service account uses domain-wide delegation to impersonate a domain admin user (`d@bytebase.com`) to access the Admin SDK.
 
 ### 3. Configure GitHub Secrets
 
@@ -76,7 +77,7 @@ cd synconcall
 go build -o synconcall
 
 GOOGLE_CREDENTIALS="$(cat /path/to/service-account.json)" \
-  ./synconcall --config=../dev.oncall --group=dev-oncall@bytebase.com
+  ./synconcall --config=../dev.oncall --group=dev-oncall@bytebase.com --admin-user=d@bytebase.com
 ```
 
 ## Updating the Schedule

@@ -12,6 +12,7 @@ func main() {
 	// Define flags
 	configPath := flag.String("config", "", "Path to the oncall schedule file (required)")
 	groupEmail := flag.String("group", "", "Google Group email address to sync (required)")
+	adminUser := flag.String("admin-user", "", "Domain admin user email for impersonation (required)")
 	showHelp := flag.Bool("help", false, "Show usage information")
 
 	flag.Parse()
@@ -35,6 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *adminUser == "" {
+		fmt.Fprintf(os.Stderr, "Error: --admin-user flag is required\n\n")
+		printUsage()
+		os.Exit(1)
+	}
+
 	// Get credentials from environment
 	credentialsJSON := os.Getenv("GOOGLE_CREDENTIALS")
 	if credentialsJSON == "" {
@@ -51,7 +58,7 @@ func main() {
 
 	// Create Google Groups client
 	ctx := context.Background()
-	client, err := NewGoogleGroupsClient(ctx, []byte(credentialsJSON))
+	client, err := NewGoogleGroupsClient(ctx, []byte(credentialsJSON), *adminUser)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: authentication failed - %v\n", err)
 		fmt.Fprintf(os.Stderr, "Please check that your service account has domain-wide delegation enabled.\n")
@@ -115,13 +122,15 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `synconcall - Sync oncall rotation to Google Group
 
 Usage:
-  synconcall --config=<path> --group=<email>
+  synconcall --config=<path> --group=<email> --admin-user=<email>
 
 Required Flags:
   --config string
         Path to the oncall schedule file (CSV format)
   --group string
         Google Group email address to sync
+  --admin-user string
+        Domain admin email for service account impersonation
 
 Optional Flags:
   --help
@@ -134,11 +143,11 @@ Environment Variables:
 Examples:
   # GitHub Actions
   GOOGLE_CREDENTIALS="${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" \
-    synconcall --config=dev.oncall --group=dev-oncall@bytebase.com
+    synconcall --config=dev.oncall --group=dev-oncall@bytebase.com --admin-user=admin@bytebase.com
 
   # Local testing
   GOOGLE_CREDENTIALS="$(cat service-account.json)" \
-    synconcall --config=dev.oncall --group=dev-oncall@bytebase.com
+    synconcall --config=dev.oncall --group=dev-oncall@bytebase.com --admin-user=admin@bytebase.com
 
 Schedule File Format:
   CSV format with 3 columns: timestamp,primary_email,secondary_email

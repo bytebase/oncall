@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/option"
 )
@@ -23,8 +24,19 @@ type GoogleGroupsClient struct {
 }
 
 // NewGoogleGroupsClient creates a new Google Groups client using service account credentials
-func NewGoogleGroupsClient(ctx context.Context, credentialsJSON []byte) (*GoogleGroupsClient, error) {
-	service, err := admin.NewService(ctx, option.WithCredentialsJSON(credentialsJSON))
+// subject is the email of a domain admin user that the service account will impersonate
+func NewGoogleGroupsClient(ctx context.Context, credentialsJSON []byte, subject string) (*GoogleGroupsClient, error) {
+	config, err := google.JWTConfigFromJSON(credentialsJSON,
+		"https://www.googleapis.com/auth/admin.directory.group",
+		"https://www.googleapis.com/auth/admin.directory.group.member")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
+	// Set the subject for domain-wide delegation
+	config.Subject = subject
+
+	service, err := admin.NewService(ctx, option.WithHTTPClient(config.Client(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create admin service: %w", err)
 	}
