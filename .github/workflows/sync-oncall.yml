@@ -34,4 +34,5 @@ jobs:
           cd synconcall
           ./synconcall --config=../dev.oncall \
             --group=dev-oncall@bytebase.com --admin-user=d@bytebase.com \
-            --slack-group=S0AAPDZBNQL
+            --slack-group=S0AAPDZBNQL \
+            --slack-channel=C08CMEAP63T

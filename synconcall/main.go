@@ -23,6 +23,7 @@ func main() {
 	// Slack flags
 	slackGroup := flag.String("slack-group", "", "Slack User Group ID to sync")
 	slackToken := flag.String("slack-token", "", "Slack API Token (can also be set via SLACK_TOKEN env var)")
+	slackChannel := flag.String("slack-channel", "", "Slack Channel ID to notify on changes")
 
 	showHelp := flag.Bool("help", false, "Show usage information")
 
@@ -42,6 +43,23 @@ func main() {
 	}
 
 	syncPerformed := false
+
+	// Initialize Slack Client if needed (for sync or notifications)
+	var slackClient *SlackClient
+	token := *slackToken
+	if token == "" {
+		token = os.Getenv("SLACK_TOKEN")
+	}
+
+	if token != "" {
+		slackClient = NewSlackClient(token)
+	} else if *slackGroup != "" || *slackChannel != "" {
+		fmt.Fprintf(os.Stderr, "Error: Slack token is required via --slack-token or SLACK_TOKEN env var for Slack sync or notifications\n")
+		os.Exit(1)
+	}
+
+	syncNotifier := slackClient
+	notificationChannel := *slackChannel
 
 	// Google Group Sync
 	if *groupEmail != "" {
@@ -77,7 +95,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := runSync(*configPath, *groupEmail, googleClient); err != nil {
+		if err := runSync(*configPath, *groupEmail, googleClient, syncNotifier, notificationChannel); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Google Group sync failed - %v\n", err)
 			os.Exit(1)
 		}
@@ -89,17 +107,9 @@ func main() {
 		syncPerformed = true
 		fmt.Println("--- Starting Slack Sync ---")
 
-		token := *slackToken
-		if token == "" {
-			token = os.Getenv("SLACK_TOKEN")
-		}
-		if token == "" {
-			fmt.Fprintf(os.Stderr, "Error: Slack token is required via --slack-token or SLACK_TOKEN env var\n")
-			os.Exit(1)
-		}
-		slackClient := NewSlackClient(token)
+		// slackClient is already initialized above
 
-		if err := runSync(*configPath, *slackGroup, slackClient); err != nil {
+		if err := runSync(*configPath, *slackGroup, slackClient, syncNotifier, notificationChannel); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Slack sync failed - %v\n", err)
 			os.Exit(1)
 		}
@@ -113,7 +123,7 @@ func main() {
 	}
 }
 
-func runSync(configPath string, groupEmail string, client GroupsClient) error {
+func runSync(configPath string, groupEmail string, client GroupsClient, notifier *SlackClient, notificationChannel string) error {
 	fmt.Printf("Reading schedule from: %s\n", configPath)
 
 	// Get current time
@@ -153,6 +163,24 @@ func runSync(configPath string, groupEmail string, client GroupsClient) error {
 		for _, member := range result.Added {
 			fmt.Printf("  Added: %s\n", member)
 		}
+
+		// Send notification if configured
+		if notifier != nil && notificationChannel != "" {
+			msg := fmt.Sprintf("On-call rotation update for *%s*:\n", groupEmail)
+			if len(result.Added) > 0 {
+				msg += fmt.Sprintf("• Added: %v\n", result.Added)
+			}
+			if len(result.Removed) > 0 {
+				msg += fmt.Sprintf("• Removed: %v\n", result.Removed)
+			}
+			msg += fmt.Sprintf("\nCurrent on-call:\n• Primary: %s\n• Secondary: %s",
+				currentRotation.Primary, currentRotation.Secondary)
+
+			fmt.Printf("Sending notification to channel %s...\n", notificationChannel)
+			if err := notifier.PostMessage(notificationChannel, msg); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to send Slack notification: %v\n", err)
+			}
+		}
 	}
 
 	fmt.Println("Sync completed successfully.")
@@ -163,7 +191,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `synconcall - Sync oncall rotation to Google Group or Slack User Group
 
 Usage:
-  synconcall --config=<path> [--group=<email> --admin-user=<email>] [--slack-group=<id> --slack-token=<token>]
+  synconcall --config=<path> [--group=<email> --admin-user=<email>] [--slack-group=<id> --slack-token=<token>] [--slack-channel=<channel_id>]
 
 Required Flags:
   --config string
@@ -181,6 +209,8 @@ Slack Flags:
         Slack User Group ID to sync
   --slack-token string
         Slack API Token (can also be set via SLACK_TOKEN env var)
+  --slack-channel string
+        Slack Channel ID to notify on changes
 
 Optional Flags:
   --help
