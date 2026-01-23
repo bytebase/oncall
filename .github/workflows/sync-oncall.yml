@@ -2,8 +2,11 @@ name: Sync Oncall to Google Group
 
 on:
   schedule:
-    # Run daily at 00:00 UTC
-    - cron: '0 0 * * *'
+    # Run daily at 01:00 UTC (rotation starts at 00:00 UTC)
+    - cron: '0 1 * * *'
+  push:
+    branches:
+      - main
   workflow_dispatch: # Allow manual trigger
 
 jobs:
