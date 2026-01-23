@@ -43,6 +43,8 @@ func main() {
 	}
 
 	syncPerformed := false
+	anyChanges := false
+	var currentRotation *Rotation
 
 	// Initialize Slack Client if needed (for sync or notifications)
 	var slackClient *SlackClient
@@ -57,9 +59,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: Slack token is required via --slack-token or SLACK_TOKEN env var for Slack sync or notifications\n")
 		os.Exit(1)
 	}
-
-	syncNotifier := slackClient
-	notificationChannel := *slackChannel
 
 	// Google Group Sync
 	if *groupEmail != "" {
@@ -95,10 +94,16 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := runSync(*configPath, *groupEmail, googleClient, syncNotifier, notificationChannel); err != nil {
+		changed, rot, err := runSync(*configPath, *groupEmail, googleClient)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Google Group sync failed - %v\n", err)
 			os.Exit(1)
 		}
+		if changed {
+			anyChanges = true
+		}
+		currentRotation = rot
+
 		fmt.Printf("--- Google Group Sync Completed ---\n\n")
 	}
 
@@ -109,10 +114,15 @@ func main() {
 
 		// slackClient is already initialized above
 
-		if err := runSync(*configPath, *slackGroup, slackClient, syncNotifier, notificationChannel); err != nil {
+		changed, rot, err := runSync(*configPath, *slackGroup, slackClient)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Slack sync failed - %v\n", err)
 			os.Exit(1)
 		}
+		if changed {
+			anyChanges = true
+		}
+		currentRotation = rot // Either sync source provides valid rotation
 		fmt.Printf("--- Slack Sync Completed ---\n\n")
 	}
 
@@ -121,9 +131,21 @@ func main() {
 		printUsage()
 		os.Exit(1)
 	}
+
+	// Send notification if configured and changes were made
+	if anyChanges && slackClient != nil && *slackChannel != "" && currentRotation != nil {
+		fmt.Printf("--- Sending Notification ---\n")
+		msg := fmt.Sprintf("On-call rotation update.\n\nCurrent on-call:\n• Primary: %s\n• Secondary: %s",
+			currentRotation.Primary, currentRotation.Secondary)
+
+		fmt.Printf("Sending notification to channel %s...\n", *slackChannel)
+		if err := slackClient.PostMessage(*slackChannel, msg); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to send Slack notification: %v\n", err)
+		}
+	}
 }
 
-func runSync(configPath string, groupEmail string, client GroupsClient, notifier *SlackClient, notificationChannel string) error {
+func runSync(configPath string, groupEmail string, client GroupsClient) (bool, *Rotation, error) {
 	fmt.Printf("Reading schedule from: %s\n", configPath)
 
 	// Get current time
@@ -132,12 +154,12 @@ func runSync(configPath string, groupEmail string, client GroupsClient, notifier
 	// Parse schedule and find current rotation
 	rotations, err := ParseSchedule(configPath)
 	if err != nil {
-		return err
+		return false, nil, err
 	}
 
 	currentRotation, err := FindCurrentRotation(rotations, now)
 	if err != nil {
-		return err
+		return false, nil, err
 	}
 
 	fmt.Printf("Current rotation: %s - Primary: %s, Secondary: %s\n",
@@ -150,12 +172,13 @@ func runSync(configPath string, groupEmail string, client GroupsClient, notifier
 
 	result, err := Sync(groupEmail, configPath, client, now)
 	if err != nil {
-		return err
+		return false, nil, err
 	}
 
 	// Report results
 	if len(result.Removed) == 0 && len(result.Added) == 0 {
 		fmt.Println("  No changes needed.")
+		return false, currentRotation, nil
 	} else {
 		for _, member := range result.Removed {
 			fmt.Printf("  Removed: %s\n", member)
@@ -163,21 +186,8 @@ func runSync(configPath string, groupEmail string, client GroupsClient, notifier
 		for _, member := range result.Added {
 			fmt.Printf("  Added: %s\n", member)
 		}
-
-		// Send notification if configured
-		if notifier != nil && notificationChannel != "" {
-			msg := fmt.Sprintf("On-call rotation update for *%s*.\n\nCurrent on-call:\n• Primary: %s\n• Secondary: %s",
-				groupEmail, currentRotation.Primary, currentRotation.Secondary)
-
-			fmt.Printf("Sending notification to channel %s...\n", notificationChannel)
-			if err := notifier.PostMessage(notificationChannel, msg); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to send Slack notification: %v\n", err)
-			}
-		}
+		return true, currentRotation, nil
 	}
-
-	fmt.Println("Sync completed successfully.")
-	return nil
 }
 
 func printUsage() {
