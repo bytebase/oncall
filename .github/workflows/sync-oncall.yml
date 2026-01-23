@@ -1,0 +1,31 @@
+name: Sync Oncall to Google Group
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build synconcall
+        run: |
+          cd synconcall
+          go build -o synconcall
+
+      - name: Sync oncall rotation
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+        run: |
+          cd synconcall
+          ./synconcall --config=../dev.oncall --group=dev-oncall@bytebase.com
