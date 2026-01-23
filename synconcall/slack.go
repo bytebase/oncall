@@ -141,3 +141,12 @@ func (c *SlackClient) PostMessage(channelID, message string) error {
 	}
 	return nil
 }
+
+// GetUserIDByEmail resolves an email to a Slack User ID
+func (c *SlackClient) GetUserIDByEmail(email string) (string, error) {
+	user, err := c.client.GetUserByEmail(email)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user by email %s: %w", email, err)
+	}
+	return user.ID, nil
+}

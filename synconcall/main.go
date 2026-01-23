@@ -134,9 +134,21 @@ func main() {
 
 	// Send notification if configured and changes were made
 	if anyChanges && slackClient != nil && *slackChannel != "" && currentRotation != nil {
+
 		fmt.Printf("--- Sending Notification ---\n")
+
+		primaryMention := currentRotation.Primary
+		if id, err := slackClient.GetUserIDByEmail(primaryMention); err == nil {
+			primaryMention = fmt.Sprintf("<@%s>", id)
+		}
+
+		secondaryMention := currentRotation.Secondary
+		if id, err := slackClient.GetUserIDByEmail(secondaryMention); err == nil {
+			secondaryMention = fmt.Sprintf("<@%s>", id)
+		}
+
 		msg := fmt.Sprintf("On-call rotation update.\n\nCurrent on-call:\n• Primary: %s\n• Secondary: %s",
-			currentRotation.Primary, currentRotation.Secondary)
+			primaryMention, secondaryMention)
 
 		fmt.Printf("Sending notification to channel %s...\n", *slackChannel)
 		if err := slackClient.PostMessage(*slackChannel, msg); err != nil {
