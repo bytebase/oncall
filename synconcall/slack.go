@@ -132,3 +132,21 @@ func (c *SlackClient) RemoveMember(groupID, memberEmail string) error {
 
 	return nil
 }
+
+// PostMessage sends a message to a Slack channel
+func (c *SlackClient) PostMessage(channelID, message string) error {
+	_, _, err := c.client.PostMessage(channelID, slack.MsgOptionText(message, false))
+	if err != nil {
+		return fmt.Errorf("failed to post message to slack channel %s: %w", channelID, err)
+	}
+	return nil
+}
+
+// GetUserIDByEmail resolves an email to a Slack User ID
+func (c *SlackClient) GetUserIDByEmail(email string) (string, error) {
+	user, err := c.client.GetUserByEmail(email)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user by email %s: %w", email, err)
+	}
+	return user.ID, nil
+}
