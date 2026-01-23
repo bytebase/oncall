@@ -17,8 +17,13 @@ func main() {
 
 	// Define flags
 	configPath := flag.String("config", "", "Path to the oncall schedule file (required)")
-	groupEmail := flag.String("group", "", "Google Group email address to sync (required)")
-	adminUser := flag.String("admin-user", "", "Domain admin user email for impersonation (required)")
+	// Google Group flags
+	groupEmail := flag.String("group", "", "Google Group email address to sync")
+	adminUser := flag.String("admin-user", "", "Domain admin user email for impersonation (Google Group only)")
+	// Slack flags
+	slackGroup := flag.String("slack-group", "", "Slack User Group ID to sync")
+	slackToken := flag.String("slack-token", "", "Slack API Token (can also be set via SLACK_TOKEN env var)")
+
 	showHelp := flag.Bool("help", false, "Show usage information")
 
 	flag.Parse()
@@ -36,44 +41,74 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *groupEmail == "" {
-		fmt.Fprintf(os.Stderr, "Error: --group flag is required\n\n")
+	syncPerformed := false
+
+	// Google Group Sync
+	if *groupEmail != "" {
+		syncPerformed = true
+		fmt.Println("--- Starting Google Group Sync ---")
+
+		if *adminUser == "" {
+			fmt.Fprintf(os.Stderr, "Error: --admin-user flag is required for Google Group sync\n\n")
+			printUsage()
+			os.Exit(1)
+		}
+
+		// Get credentials from environment
+		credentialsJSON := os.Getenv("GOOGLE_CREDENTIALS")
+		if credentialsJSON == "" {
+			fmt.Fprintf(os.Stderr, "Error: GOOGLE_CREDENTIALS environment variable not set\n")
+			fmt.Fprintf(os.Stderr, "Please set it to your Google service account JSON key content.\n")
+			os.Exit(1)
+		}
+
+		// Validate credentials format
+		if err := ValidateCredentials([]byte(credentialsJSON)); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Create Google Groups client
+		ctx := context.Background()
+		googleClient, err := NewGoogleGroupsClient(ctx, []byte(credentialsJSON), *adminUser)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: authentication failed - %v\n", err)
+			fmt.Fprintf(os.Stderr, "Please check that your service account has domain-wide delegation enabled.\n")
+			os.Exit(1)
+		}
+
+		if err := runSync(*configPath, *groupEmail, googleClient); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Google Group sync failed - %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("--- Google Group Sync Completed ---\n\n")
+	}
+
+	// Slack Sync
+	if *slackGroup != "" {
+		syncPerformed = true
+		fmt.Println("--- Starting Slack Sync ---")
+
+		token := *slackToken
+		if token == "" {
+			token = os.Getenv("SLACK_TOKEN")
+		}
+		if token == "" {
+			fmt.Fprintf(os.Stderr, "Error: Slack token is required via --slack-token or SLACK_TOKEN env var\n")
+			os.Exit(1)
+		}
+		slackClient := NewSlackClient(token)
+
+		if err := runSync(*configPath, *slackGroup, slackClient); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Slack sync failed - %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("--- Slack Sync Completed ---\n\n")
+	}
+
+	if !syncPerformed {
+		fmt.Fprintf(os.Stderr, "Error: No sync target specified. Provide --group (Google Groups) or --slack-group (Slack) or both.\n\n")
 		printUsage()
-		os.Exit(1)
-	}
-
-	if *adminUser == "" {
-		fmt.Fprintf(os.Stderr, "Error: --admin-user flag is required\n\n")
-		printUsage()
-		os.Exit(1)
-	}
-
-	// Get credentials from environment
-	credentialsJSON := os.Getenv("GOOGLE_CREDENTIALS")
-	if credentialsJSON == "" {
-		fmt.Fprintf(os.Stderr, "Error: GOOGLE_CREDENTIALS environment variable not set\n")
-		fmt.Fprintf(os.Stderr, "Please set it to your Google service account JSON key content.\n")
-		os.Exit(1)
-	}
-
-	// Validate credentials format
-	if err := ValidateCredentials([]byte(credentialsJSON)); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Create Google Groups client
-	ctx := context.Background()
-	client, err := NewGoogleGroupsClient(ctx, []byte(credentialsJSON), *adminUser)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: authentication failed - %v\n", err)
-		fmt.Fprintf(os.Stderr, "Please check that your service account has domain-wide delegation enabled.\n")
-		os.Exit(1)
-	}
-
-	// Run sync
-	if err := runSync(*configPath, *groupEmail, client); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -125,35 +160,40 @@ func runSync(configPath string, groupEmail string, client GroupsClient) error {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `synconcall - Sync oncall rotation to Google Group
+	fmt.Fprintf(os.Stderr, `synconcall - Sync oncall rotation to Google Group or Slack User Group
 
 Usage:
-  synconcall --config=<path> --group=<email> --admin-user=<email>
+  synconcall --config=<path> [--group=<email> --admin-user=<email>] [--slack-group=<id> --slack-token=<token>]
 
 Required Flags:
   --config string
         Path to the oncall schedule file (CSV format)
+
+Google Group Flags:
   --group string
         Google Group email address to sync
   --admin-user string
         Domain admin email for service account impersonation
+  (Requires GOOGLE_CREDENTIALS environment variable)
+
+Slack Flags:
+  --slack-group string
+        Slack User Group ID to sync
+  --slack-token string
+        Slack API Token (can also be set via SLACK_TOKEN env var)
 
 Optional Flags:
   --help
         Show this usage information
 
-Environment Variables:
-  GOOGLE_CREDENTIALS (required)
-        Google service account JSON key content
-
 Examples:
-  # GitHub Actions
+  # Google Groups (GitHub Actions)
   GOOGLE_CREDENTIALS="${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" \
     synconcall --config=dev.oncall --group=dev-oncall@bytebase.com --admin-user=admin@bytebase.com
 
-  # Local testing
-  GOOGLE_CREDENTIALS="$(cat service-account.json)" \
-    synconcall --config=dev.oncall --group=dev-oncall@bytebase.com --admin-user=admin@bytebase.com
+  # Slack (GitHub Actions)
+  SLACK_TOKEN="${{ secrets.SLACK_TOKEN }}" \
+    synconcall --config=dev.oncall --slack-group=S0123456789
 
 Schedule File Format:
   CSV format with 3 columns: timestamp,primary_email,secondary_email
