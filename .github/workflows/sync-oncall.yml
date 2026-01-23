@@ -1,4 +1,4 @@
-name: Sync Oncall to Google Group
+name: Sync Oncall to Google Group and Slack Group
 
 on:
   schedule:
