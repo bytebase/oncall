@@ -166,15 +166,8 @@ func runSync(configPath string, groupEmail string, client GroupsClient, notifier
 
 		// Send notification if configured
 		if notifier != nil && notificationChannel != "" {
-			msg := fmt.Sprintf("On-call rotation update for *%s*:\n", groupEmail)
-			if len(result.Added) > 0 {
-				msg += fmt.Sprintf("• Added: %v\n", result.Added)
-			}
-			if len(result.Removed) > 0 {
-				msg += fmt.Sprintf("• Removed: %v\n", result.Removed)
-			}
-			msg += fmt.Sprintf("\nCurrent on-call:\n• Primary: %s\n• Secondary: %s",
-				currentRotation.Primary, currentRotation.Secondary)
+			msg := fmt.Sprintf("On-call rotation update for *%s*.\n\nCurrent on-call:\n• Primary: %s\n• Secondary: %s",
+				groupEmail, currentRotation.Primary, currentRotation.Secondary)
 
 			fmt.Printf("Sending notification to channel %s...\n", notificationChannel)
 			if err := notifier.PostMessage(notificationChannel, msg); err != nil {
