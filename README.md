@@ -37,6 +37,8 @@ The sync is **declarative** - the group always reflects exactly who is currently
 
 ## Setup
 
+**Service Account:** `dev-tools@bytebase-dev.iam.gserviceaccount.com`
+
 ### 1. Create Service Account
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
