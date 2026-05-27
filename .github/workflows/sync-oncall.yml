@@ -1,9 +1,6 @@
 name: Sync Oncall to Google Group and Slack Group
 
 on:
-  schedule:
-    # Run daily at 01:00 UTC (rotation starts at 00:00 UTC)
-    - cron: '0 1 * * *'
   push:
     branches:
       - main
@@ -20,6 +17,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+          cache: true
+          cache-dependency-path: synconcall/go.sum
 
       - name: Build synconcall
         run: |
