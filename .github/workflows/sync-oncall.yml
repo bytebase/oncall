@@ -1,4 +1,4 @@
-name: Sync Oncall to Google Group and Slack Group
+name: Sync Oncall to Google Group, Slack Group, and GitHub Team
 
 on:
   push:
@@ -29,9 +29,12 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHA_DISPATCH_TOKEN }}
         run: |
           cd synconcall
           ./synconcall --config=../dev.oncall \
             --group=dev-oncall@bytebase.com --admin-user=d@bytebase.com \
             --slack-group=S0AAPDZBNQL \
-            --slack-channel=C08CMEAP63T
+            --slack-channel=C08CMEAP63T \
+            --github-org=bytebase --github-team=bytebase-oncall \
+            --github-users=../github-users.csv

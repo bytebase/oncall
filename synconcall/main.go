@@ -24,6 +24,11 @@ func main() {
 	slackGroup := flag.String("slack-group", "", "Slack User Group ID to sync")
 	slackToken := flag.String("slack-token", "", "Slack API Token (can also be set via SLACK_TOKEN env var)")
 	slackChannel := flag.String("slack-channel", "", "Slack Channel ID to notify on changes")
+	// GitHub team flags
+	githubOrg := flag.String("github-org", "", "GitHub organization that owns the team to sync")
+	githubTeam := flag.String("github-team", "", "GitHub team slug to sync (e.g. bytebase-oncall)")
+	githubUsers := flag.String("github-users", "", "Path to the email,github_username mapping CSV")
+	githubToken := flag.String("github-token", "", "GitHub token (can also be set via GH_TOKEN or GITHUB_TOKEN env var)")
 
 	showHelp := flag.Bool("help", false, "Show usage information")
 
@@ -126,8 +131,55 @@ func main() {
 		fmt.Printf("--- Slack Sync Completed ---\n\n")
 	}
 
+	// GitHub Team Sync
+	if *githubTeam != "" {
+		syncPerformed = true
+		fmt.Println("--- Starting GitHub Team Sync ---")
+
+		if *githubOrg == "" {
+			fmt.Fprintf(os.Stderr, "Error: --github-org flag is required for GitHub team sync\n\n")
+			printUsage()
+			os.Exit(1)
+		}
+		if *githubUsers == "" {
+			fmt.Fprintf(os.Stderr, "Error: --github-users flag is required for GitHub team sync\n\n")
+			printUsage()
+			os.Exit(1)
+		}
+
+		ghToken := *githubToken
+		if ghToken == "" {
+			ghToken = os.Getenv("GH_TOKEN")
+		}
+		if ghToken == "" {
+			ghToken = os.Getenv("GITHUB_TOKEN")
+		}
+		if ghToken == "" {
+			fmt.Fprintf(os.Stderr, "Error: GitHub token is required via --github-token, GH_TOKEN, or GITHUB_TOKEN env var\n")
+			os.Exit(1)
+		}
+
+		mapping, err := LoadUserMapping(*githubUsers)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		githubClient := NewGitHubTeamClient(*githubOrg, ghToken, mapping)
+		changed, rot, err := runSync(*configPath, *githubTeam, githubClient)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: GitHub team sync failed - %v\n", err)
+			os.Exit(1)
+		}
+		if changed {
+			anyChanges = true
+		}
+		currentRotation = rot
+		fmt.Printf("--- GitHub Team Sync Completed ---\n\n")
+	}
+
 	if !syncPerformed {
-		fmt.Fprintf(os.Stderr, "Error: No sync target specified. Provide --group (Google Groups) or --slack-group (Slack) or both.\n\n")
+		fmt.Fprintf(os.Stderr, "Error: No sync target specified. Provide --group (Google Groups), --slack-group (Slack), or --github-team (GitHub).\n\n")
 		printUsage()
 		os.Exit(1)
 	}
@@ -226,6 +278,16 @@ Slack Flags:
         Slack API Token (can also be set via SLACK_TOKEN env var)
   --slack-channel string
         Slack Channel ID to notify on changes
+
+GitHub Team Flags:
+  --github-org string
+        GitHub organization that owns the team
+  --github-team string
+        GitHub team slug to sync (e.g. bytebase-oncall)
+  --github-users string
+        Path to the email,github_username mapping CSV
+  --github-token string
+        GitHub token (can also be set via GH_TOKEN or GITHUB_TOKEN env var)
 
 Optional Flags:
   --help
