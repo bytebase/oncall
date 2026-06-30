@@ -1,0 +1,10 @@
+# Maps oncall emails (used in *.oncall schedules) to GitHub usernames.
+# Used by synconcall to sync the GitHub org team (e.g. bytebase-oncall).
+# Format: email,github_username
+d@bytebase.com,d-bytebase
+xz@bytebase.com,RainbowDashy
+zp@bytebase.com,h3n4l
+vh@bytebase.com,vsai12
+jy@bytebase.com,rebelice
+ed@bytebase.com,ecmadao
+sl@bytebase.com,boojack
